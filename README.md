@@ -19,9 +19,11 @@ $ chmod +x !$
 $ wifi2qr
 ```
 
-… then read the barcode with your smartphone to connect to the
+… which will pop up a barcode that you can read with your smartphone to connect to the
 network. Tested with Android's `zxing`-based
 [Barcode Scanner](https://play.google.com/store/apps/details?id=com.google.zxing.client.android).
+
+![WIFI:S:ExampleWPA;T:WPA;P:ExamplePassword;;](example.png)
 
 You can also share a specific connection, by its NetworkManager
 connection name or UUID with `wifi2qr CONNECTION`.
