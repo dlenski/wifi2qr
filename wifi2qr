@@ -1,0 +1,45 @@
+#!/bin/bash
+
+if ! which nmcli >/dev/null; then
+    echo "ERROR: nmcli not found in path" 2>&1
+fi
+
+if [[ $# < 1 ]]; then
+    conn="$(nmcli -t -f active,ssid dev wifi | grep '^yes:' | cut -c5-)"
+    [[ -z "$conn" ]] && echo "ERROR: no WiFi network active; specify connection name" 2>&1 && exit 1
+else
+    conn="$1"
+fi
+echo "Looking up connection parameters for WiFi connection '$conn' ..."
+
+# Read connection parameters
+shopt -s lastpipe
+IFS=:
+unset ssid hidden psk
+type=nopass
+
+nmcli -s -t -f "connection.type,802-11-wireless.ssid,802-11-wireless.hidden,802-11-wireless-security.psk" conn show "$conn" |
+while read parm val
+do
+    if [[ "$parm" == "connection.type" && "$val" != "802-11-wireless" ]]; then
+        echo "ERROR: connection '$conn' is $val, not WiFi" 2>&1;
+        exit 1;
+    elif [[ "$parm" == "802-11-wireless.ssid" ]]; then
+        ssid="$val"
+    elif [[ "$parm" == "802-11-wireless.hidden" && "$val" == "yes" ]]; then
+        hidden="H:true;"
+    elif [[ "$parm" == "802-11-wireless-security.psk" ]]; then
+        pass="T:WPA;P:$val;"
+    fi
+done
+
+[[ -z "$ssid" ]] && echo "ERROR: could not parse nmcli output" 2>&1 && exit 1
+
+barcode="WIFI:S:${ssid};${pass}${hidden};"
+
+if ! which qrencode display >/dev/null; then
+    printf "WARNING: qrencode or display not found in path, use this barcode:\n" 2>&1
+    echo "$barcode"
+else
+    qrencode -o- "$barcode" | display -sample 300% -title "WiFi barcode: $conn" - &
+fi
