@@ -1,16 +1,17 @@
 #!/bin/bash
 
 if ! which nmcli >/dev/null; then
-    echo "ERROR: nmcli not found in path" 2>&1
+    echo "ERROR: nmcli not found in path" >&2
 fi
 
 if [[ $# < 1 ]]; then
     conn="$(nmcli -t -f active,ssid dev wifi | grep '^yes:' | cut -c5-)"
-    [[ -z "$conn" ]] && echo "ERROR: no WiFi network active; specify connection name" 2>&1 && exit 1
+    [[ -z "$conn" ]] && echo "ERROR: no WiFi network active; specify connection name" >&2 && exit 1
+    echo "Using current WiFi connection '$conn' ..." >&2
 else
     conn="$1"
 fi
-echo "Looking up connection parameters for WiFi connection '$conn' ..."
+echo "Looking up connection parameters for WiFi connection '$conn' ..." >&2
 
 # Read connection parameters
 shopt -s lastpipe
@@ -33,12 +34,12 @@ do
     fi
 done
 
-[[ -z "$ssid" ]] && echo "ERROR: could not parse nmcli output" 2>&1 && exit 1
+[[ -z "$ssid" ]] && echo "ERROR: could not parse nmcli output" >&2 && exit 1
 
 barcode="WIFI:S:${ssid};${pass}${hidden};"
 
 if ! which qrencode display >/dev/null; then
-    printf "WARNING: qrencode or display not found in path, use this barcode:\n" 2>&1
+    printf "WARNING: qrencode or display not found in path, use this barcode:\n" >&2
     echo "$barcode"
 else
     qrencode -o- "$barcode" | display -sample 300% -title "WiFi barcode: $conn" - &
