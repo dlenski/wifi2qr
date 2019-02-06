@@ -8,10 +8,13 @@ fi
 
 show_list=false
 show_help=false
-while getopts lh optval; do
+mode=display
+while getopts lhua optval; do
     case $optval in
         l) show_list=true ;;
         h) show_help=true ;;
+        a) mode=ANSI ;;
+        u) mode=UTF8 ;;
         \?) show_help=true ;;
     esac
 done
@@ -34,10 +37,12 @@ if [[ $show_list != true && $show_help != true ]]; then
 fi
 
 if [[ $show_help == true ]]; then
-    echo "$0 [-h] [-l] [connection]" >&2
+    echo "$0 [-h] [-l] [-u | -a] [connection]" >&2
     echo >&2
     echo "  -h            Show this help message" >&2
     echo "  -l            List WiFi connections known to NetworkManager" >&2
+    echo "  -u | -a       Show QR code using UTF8 or ANSI characters" >&2
+    echo "                (default is to display as an image)" >&2
     echo "  connection    Show QR code for specific connection (default" >&2
     echo "                is currently-enabled WiFi connection)" >&2
     exit 1
@@ -75,5 +80,9 @@ done
 
 [[ -z "$ssid" ]] && echo "ERROR: could not parse nmcli output" >&2 && exit 1
 
-qrencode -o- "WIFI:S:${ssid}${pass}${hidden};" |
-    display -geometry -0-0 -sample 300% -title "Share WiFi: $ssid" - &
+if [[ $mode != display ]]; then
+    qrencode -t "$mode" -o- "WIFI:S:${ssid}${pass}${hidden};"
+else
+    qrencode -o- "WIFI:S:${ssid}${pass}${hidden};" |
+        display -geometry -0-0 -sample 300% -title "Share WiFi: $ssid" - &
+fi
