@@ -1,20 +1,21 @@
 #!/bin/bash
 
-if ! which nmcli qrencode display >/dev/null; then
-    echo "ERROR: nmcli, qrencode, or display not found in path" >&2
+if ! which nmcli qrencode >/dev/null; then
+    echo "ERROR: nmcli, qrencode not found in path" >&2
+    exit 1
 fi
 
 # Parse arguments
 
 show_list=false
 show_help=false
-mode=display
-while getopts lhua optval; do
+mode=UTF8
+while getopts lhai optval; do
     case $optval in
         l) show_list=true ;;
         h) show_help=true ;;
         a) mode=ANSI ;;
-        u) mode=UTF8 ;;
+        i) mode=PNG; if ! which display >/dev/null; then echo "ERROR: display not found in path" >&2; exit 1; fi ;;
         \?) show_help=true ;;
     esac
 done
@@ -41,8 +42,8 @@ if [[ $show_help == true ]]; then
     echo >&2
     echo "  -h            Show this help message" >&2
     echo "  -l            List WiFi connections known to NetworkManager" >&2
-    echo "  -u | -a       Show QR code using UTF8 or ANSI characters" >&2
-    echo "                (default is to display as an image)" >&2
+    echo "  -a | -i       Show QR code using ANSI characters or as image" >&2
+    echo "                (default is to display with UTF8 characters)" >&2
     echo "  connection    Show QR code for specific connection (default" >&2
     echo "                is currently-enabled WiFi connection)" >&2
     exit 1
@@ -80,7 +81,7 @@ done
 
 [[ -z "$ssid" ]] && echo "ERROR: could not parse nmcli output" >&2 && exit 1
 
-if [[ $mode != display ]]; then
+if [[ $mode != PNG ]]; then
     qrencode -t "$mode" -o- "WIFI:S:${ssid}${pass}${hidden};"
 else
     qrencode -o- "WIFI:S:${ssid}${pass}${hidden};" |
