@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if ! which nmcli >/dev/null; then
-    echo "ERROR: nmcli not found in path" >&2
+if ! which nmcli qrencode display >/dev/null; then
+    echo "ERROR: nmcli, qrencode, or display not found in path" >&2
 fi
 
 if [[ $# < 1 ]]; then
@@ -36,11 +36,5 @@ done
 
 [[ -z "$ssid" ]] && echo "ERROR: could not parse nmcli output" >&2 && exit 1
 
-barcode="WIFI:S:${ssid};${pass}${hidden};"
-
-if ! which qrencode display >/dev/null; then
-    printf "WARNING: qrencode or display not found in path, use this barcode:\n" >&2
-    echo "$barcode"
-else
-    qrencode -o- "$barcode" | display -sample 300% -title "WiFi barcode: $conn" - &
-fi
+qrencode -o- "WIFI:S:${ssid}${pass}${hidden};" |
+    display -geometry -0-0 -sample 300% -title "Share WiFi: $ssid" - &
