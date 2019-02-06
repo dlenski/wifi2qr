@@ -19,7 +19,7 @@ $ chmod +x !$
 $ wifi2qr
 ```
 
-… which will pop up a barcode that you can read with your smartphone to connect to the
+… which will display a barcode that you can read with your smartphone to connect to the
 network. Tested with Android's `zxing`-based
 [Barcode Scanner](https://play.google.com/store/apps/details?id=com.google.zxing.client.android).
 
@@ -27,4 +27,21 @@ network. Tested with Android's `zxing`-based
 
 You can also share a specific connection, by its NetworkManager
 connection name or UUID with `wifi2qr CONNECTION`.
-(You can list connection names with `nmcli conn`.)
+(You can list known WiFi connections with `wifi2qr -l`.)
+
+### Complete options
+
+```
+wifi2qr [-h] [-l] [-u | -a] [connection]
+
+Displays a QR code that can be scanned to connect to a WiFi network
+known to NetworkManager.
+
+Options:
+  connection    Show QR code for specific connection (if not
+                specified, currently-enabled WiFi connection)
+  -h            Show this help message
+  -l            List WiFi connections known to NetworkManager
+  -a | -i       Show QR code using ANSI characters or with ImageMagick
+                (default is to show using UTF8 characters)
+```

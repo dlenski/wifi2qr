@@ -38,14 +38,18 @@ if [[ $show_list != true && $show_help != true ]]; then
 fi
 
 if [[ $show_help == true ]]; then
-    echo "$0 [-h] [-l] [-u | -a] [connection]" >&2
+    echo "$(basename $0) [-h] [-l] [-u | -a] [connection]" >&2
     echo >&2
+    echo "Displays a QR code that can be scanned to connect to a WiFi network" >&2
+    echo "known to NetworkManager." >&2
+    echo >&2
+    echo "Options:" >&2
+    echo "  connection    Show QR code for specific connection (if not" >&2
+    echo "                specified, currently-enabled WiFi connection)" >&2
     echo "  -h            Show this help message" >&2
     echo "  -l            List WiFi connections known to NetworkManager" >&2
-    echo "  -a | -i       Show QR code using ANSI characters or as image" >&2
-    echo "                (default is to display with UTF8 characters)" >&2
-    echo "  connection    Show QR code for specific connection (default" >&2
-    echo "                is currently-enabled WiFi connection)" >&2
+    echo "  -a | -i       Show QR code using ANSI characters or with ImageMagick" >&2
+    echo "                (default is to show using UTF8 characters)" >&2
     exit 1
 elif [[ $show_list == true ]]; then
     IFS=:
