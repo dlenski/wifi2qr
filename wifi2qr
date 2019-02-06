@@ -4,14 +4,53 @@ if ! which nmcli qrencode display >/dev/null; then
     echo "ERROR: nmcli, qrencode, or display not found in path" >&2
 fi
 
-if [[ $# < 1 ]]; then
-    conn="$(nmcli -t -f active,ssid dev wifi | grep '^yes:' | cut -c5- | head -n1)"
-    [[ -z "$conn" ]] && echo "ERROR: no WiFi network active; specify connection name" >&2 && exit 1
-    echo "Using current WiFi connection '$conn' ..." >&2
-else
-    conn="$1"
+# Parse arguments
+
+show_list=false
+show_help=false
+while getopts lh optval; do
+    case $optval in
+        l) show_list=true ;;
+        h) show_help=true ;;
+        \?) show_help=true ;;
+    esac
+done
+shift $(( $OPTIND - 1 ))
+
+if [[ $show_list != true && $show_help != true ]]; then
+    if [[ $# -eq 1 ]]; then
+        conn="$1"
+    elif [[ $# -eq 0 ]]; then
+        conn="$(nmcli -t -f active,ssid dev wifi | grep '^yes:' | cut -c5- | head -n1)"
+        if [[ -z "$conn" ]]; then
+            echo "ERROR: no WiFi network active; specify connection name" >&2
+            show_help=true
+        else
+            echo "Using current WiFi connection '$conn' ..." >&2
+        fi
+    else
+        show_help=true
+    fi
 fi
-echo "Looking up connection parameters for WiFi connection '$conn' ..." >&2
+
+if [[ $show_help == true ]]; then
+    echo "$0 [-h] [-l] [connection]" >&2
+    echo >&2
+    echo "  -h            Show this help message" >&2
+    echo "  -l            List WiFi connections known to NetworkManager" >&2
+    echo "  connection    Show QR code for specific connection (default" >&2
+    echo "                is currently-enabled WiFi connection)" >&2
+    exit 1
+elif [[ $show_list == true ]]; then
+    IFS=:
+    echo "Known WiFi connections:" >&2
+    nmcli -s -t -f "name,type" conn |
+    while read name type
+    do
+        [[ "$type" == "802-11-wireless" ]] && echo "  $name" >&2
+    done
+    exit 1
+fi
 
 # Read connection parameters
 shopt -s lastpipe
