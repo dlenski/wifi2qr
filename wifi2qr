@@ -85,9 +85,11 @@ done
 
 [[ -z "$ssid" ]] && echo "ERROR: could not parse nmcli output" >&2 && exit 1
 
+barcode="WIFI:S:${ssid}${pass}${hidden};"
 if [[ $mode != PNG ]]; then
-    qrencode -t "$mode" -o- "WIFI:S:${ssid}${pass}${hidden};"
+    qrencode -t "$mode" -o- "$barcode"
 else
-    qrencode -o- "WIFI:S:${ssid}${pass}${hidden};" |
+    qrencode -o- "$barcode" |
         display -geometry -0-0 -sample 300% -title "Share WiFi: $ssid" - &
 fi
+echo "$barcode" >&2
