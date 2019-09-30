@@ -75,7 +75,7 @@ do
         echo "ERROR: connection '$conn' is $val, not WiFi" 2>&1;
         exit 1;
     elif [[ "$parm" == "802-11-wireless.ssid" ]]; then
-        ssid="$val"
+        ssid="$val;"
     elif [[ "$parm" == "802-11-wireless.hidden" && "$val" == "yes" ]]; then
         hidden="H:true;"
     elif [[ "$parm" == "802-11-wireless-security.psk" ]]; then
