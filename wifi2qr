@@ -9,13 +9,15 @@ fi
 
 show_list=false
 show_help=false
+quiet=false
 mode=UTF8
-while getopts lhai optval; do
+while getopts lhaiq optval; do
     case $optval in
         l) show_list=true ;;
         h) show_help=true ;;
         a) mode=ANSI ;;
         i) mode=PNG; if ! which display >/dev/null; then echo "ERROR: display not found in path" >&2; exit 1; fi ;;
+        q) quiet=true ;;
         \?) show_help=true ;;
     esac
 done
@@ -50,6 +52,8 @@ if [[ $show_help == true ]]; then
     echo "  -l            List WiFi connections known to NetworkManager" >&2
     echo "  -a | -i       Show QR code using ANSI characters or with ImageMagick" >&2
     echo "                (default is to show using UTF8 characters)" >&2
+    echo "  -q            Quiet mode (default is to print barcode in text" >&2
+    echo "                form to stderr as well; this suppresses it)" >&2
     exit 1
 elif [[ $show_list == true ]]; then
     IFS=:
@@ -92,4 +96,6 @@ else
     qrencode -o- "$barcode" |
         display -geometry -0-0 -sample 300% -title "Share WiFi: $ssid" - &
 fi
-echo "$barcode" >&2
+if [[ $quiet != true ]]; then
+    echo "$barcode" >&2
+fi

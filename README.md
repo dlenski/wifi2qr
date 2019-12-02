@@ -44,4 +44,6 @@ Options:
   -l            List WiFi connections known to NetworkManager
   -a | -i       Show QR code using ANSI characters or with ImageMagick
                 (default is to show using UTF8 characters)
+  -q            Quiet mode (default is to print barcode in text
+                form to stderr as well; this suppresses it)
 ```
