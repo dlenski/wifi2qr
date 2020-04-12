@@ -27,7 +27,7 @@ if [[ $show_list != true && $show_help != true ]]; then
     if [[ $# -eq 1 ]]; then
         conn="$1"
     elif [[ $# -eq 0 ]]; then
-        conn="$(nmcli -t -f type,active,name conn | grep '^802-11-wireless:yes:' | cut -c21- | head -n1)"
+        conn="$(nmcli -t -f type,active,name connection show --active | grep '^802-11-wireless:' | cut -d: -f3 | head -n1)"
         if [[ -z "$conn" ]]; then
             echo "ERROR: no WiFi network active; specify connection name" >&2
             show_help=true
