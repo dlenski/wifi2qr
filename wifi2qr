@@ -72,8 +72,7 @@ fi
 # Read connection parameters
 shopt -s lastpipe
 IFS=:
-unset ssid hidden psk
-type=nopass
+unset ssid hidden pass
 
 nmcli -s -t -f "connection.type,802-11-wireless.ssid,802-11-wireless.hidden,802-11-wireless-security.psk" conn show "$conn" |
 while read parm val
@@ -82,7 +81,7 @@ do
         echo "ERROR: connection '$conn' is $val, not WiFi" 2>&1;
         exit 1;
     elif [[ "$parm" == "802-11-wireless.ssid" ]]; then
-        ssid="$val;"
+        ssid="S:$val;"
     elif [[ "$parm" == "802-11-wireless.hidden" && "$val" == "yes" ]]; then
         hidden="H:true;"
     elif [[ "$parm" == "802-11-wireless-security.psk" ]]; then
@@ -92,7 +91,7 @@ done
 
 [[ -z "$ssid" ]] && echo "ERROR: could not parse nmcli output" >&2 && exit 1
 
-barcode="WIFI:S:${ssid}${pass}${hidden};"
+barcode="WIFI:${ssid}${pass}${hidden};"
 if [[ $mode == ANSI || $mode == UTF8 ]]; then
     qrencode -t "$mode" -o- "$barcode"
 elif [[ $mode == DISPLAY ]]; then
