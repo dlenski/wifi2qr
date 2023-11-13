@@ -5,6 +5,21 @@ if ! which nmcli qrencode >/dev/null; then
     exit 1
 fi
 
+escape() {
+  local length="${#1}"
+  for (( i = 0; i < length; i++ )); do
+    local c="${1:i:1}"
+    case $c in
+      [\\\"\;\:\,]) printf "\\$c" ;;
+      *) printf "$c" ;;
+    esac
+  done
+}
+
+uppercase() {
+   tr '[:lower:]' '[:upper:]' <<< "$1"
+}
+
 # Parse arguments
 
 show_list=false
@@ -91,12 +106,12 @@ do
         echo "ERROR: connection '$conn' is $val, not WiFi" 2>&1;
         exit 1;
     elif [[ "$parm" == "802-11-wireless.ssid" ]]; then
-        ssid="S:\"$val\";"
+        ssid="S:$(escape "$val");"
     elif [[ "$parm" == "802-11-wireless.hidden" && "$val" == "yes" ]]; then
         hidden="H:true;"
     elif [[ "$parm" == "802-11-wireless-security.psk" ]]; then
         pass="T:WPA;"
-        [[ -n "$val" ]] && pass+="P:\"$val\";"
+        [[ -n "$val" ]] && pass+="P:$(escape "$val");"
     elif [[ "$parm" == "802-11-wireless-security.key-mgmt" && "$val" == "sae" ]]; then
         # WPA2/WPA3 transition disable
         # See https://superuser.com/a/1752085 and https://www.wi-fi.org/system/files/WPA3%20Specification%20v3.1.pdf secetion 7
@@ -105,13 +120,13 @@ do
     # These EAP-related settings appear to be ZXing-specific extensions. See
     # https://github.com/zxing/zxing/wiki/Barcode-Contents#wi-fi-network-config-android-ios-11
     elif [[ "$parm" == "802-1x.eap" && -n "$val" ]]; then
-        eap+="E:$val;"
+        eap+="E:$(uppercase "$val");"
     elif [[ "$parm" == "802-1x.anonymous-identity" && -n "$val" ]]; then
-        eap+="A:\"$val\";"
+        eap+="A:$(escape "$val");"
     elif [[ "$parm" == "802-1x.identity" && -n "$val" ]]; then
-        eap+="I:\"$val\";"
+        eap+="I:$(escape "$val");"
     elif [[ "$parm" == "802-1x.phase2-auth" && -n "$val" ]]; then
-        eap+="PH2:\"$val\";"
+        eap+="PH2:$(uppercase "$val");"
     fi
 done
 
