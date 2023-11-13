@@ -74,7 +74,7 @@ shopt -s lastpipe
 IFS=:
 unset ssid hidden pass eap
 
-nmcli -s -t -f "connection.type,802-11-wireless.ssid,802-11-wireless.hidden,802-11-wireless-security.psk,802-1x.eap,802-1x.anonymous-identity,802-1x.identity" conn show "$conn" |
+nmcli -s -t -f "connection.type,802-11-wireless.ssid,802-11-wireless.hidden,802-11-wireless-security.psk,802-1x.eap,802-1x.anonymous-identity,802-1x.identity,802-1x.phase2-auth" conn show "$conn" |
 while read parm val
 do
     if [[ "$parm" == "connection.type" && "$val" != "802-11-wireless" ]]; then
@@ -87,12 +87,17 @@ do
     elif [[ "$parm" == "802-11-wireless-security.psk" ]]; then
         pass="T:WPA;"
         [[ -n "$val" ]] && pass+="P:\"$val\";"
+
+    # These EAP-related settings appear to be ZXing-specific extensions. See
+    # https://github.com/zxing/zxing/wiki/Barcode-Contents#wi-fi-network-config-android-ios-11
     elif [[ "$parm" == "802-1x.eap" && -n "$val" ]]; then
         eap+="E:$val;"
     elif [[ "$parm" == "802-1x.anonymous-identity" && -n "$val" ]]; then
         eap+="A:\"$val\";"
     elif [[ "$parm" == "802-1x.identity" && -n "$val" ]]; then
         eap+="I:\"$val\";"
+    elif [[ "$parm" == "802-1x.phase2-auth" && -n "$val" ]]; then
+        eap+="PH2:\"$val\";"
     fi
 done
 
