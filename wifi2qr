@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if ! which nmcli qrencode >/dev/null; then
-    echo "ERROR: nmcli, qrencode not found in path" >&2
+if ! which nmcli qrencode sed tr cut head printf >/dev/null; then
+    echo "ERROR: nmcli, qrencode, sed, tr, cut, head, and/or printf not found in path" >&2
     exit 1
 fi
 
