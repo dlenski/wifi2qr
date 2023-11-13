@@ -72,9 +72,9 @@ fi
 # Read connection parameters
 shopt -s lastpipe
 IFS=:
-unset ssid hidden pass eap
+unset ssid hidden pass eap td
 
-nmcli -s -t -f "connection.type,802-11-wireless.ssid,802-11-wireless.hidden,802-11-wireless-security.psk,802-1x.eap,802-1x.anonymous-identity,802-1x.identity,802-1x.phase2-auth" conn show "$conn" |
+nmcli -s -t -f "connection.type,802-11-wireless.ssid,802-11-wireless.hidden,802-11-wireless-security.psk,802-11-wireless-security.key-mgmt,802-1x.eap,802-1x.anonymous-identity,802-1x.identity,802-1x.phase2-auth" conn show "$conn" |
 while read parm val
 do
     if [[ "$parm" == "connection.type" && "$val" != "802-11-wireless" ]]; then
@@ -87,6 +87,10 @@ do
     elif [[ "$parm" == "802-11-wireless-security.psk" ]]; then
         pass="T:WPA;"
         [[ -n "$val" ]] && pass+="P:\"$val\";"
+    elif [[ "$parm" == "802-11-wireless-security.key-mgmt" && "$val" == "sae" ]]; then
+        # WPA2/WPA3 transition disable
+        # See https://superuser.com/a/1752085 and https://www.wi-fi.org/system/files/WPA3%20Specification%20v3.1.pdf secetion 7
+        td="R:1;"
 
     # These EAP-related settings appear to be ZXing-specific extensions. See
     # https://github.com/zxing/zxing/wiki/Barcode-Contents#wi-fi-network-config-android-ios-11
@@ -103,7 +107,7 @@ done
 
 [[ -z "$ssid" ]] && echo "ERROR: could not parse nmcli output" >&2 && exit 1
 
-barcode="WIFI:${ssid}${pass}${hidden}${eap};"
+barcode="WIFI:${ssid}${td}${pass}${hidden}${eap};"
 if [[ $mode == ANSI || $mode == UTF8 ]]; then
     qrencode -t "$mode" -o- "$barcode"
 elif [[ $mode == DISPLAY ]]; then
