@@ -66,6 +66,7 @@ parms = dict(
              '802-11-wireless-security.key-mgmt',
              '802-1x.eap',
              '802-1x.anonymous-identity',
+             '802-1x.client-cert',
              '802-1x.identity',
              '802-1x.phase2-auth',
              '802-1x.password'],
@@ -88,7 +89,8 @@ if parms.get('802-11-wireless-security.key-mgmt') == 'sae':
 if parms.get('802-1x.eap'):
     # These EAP-related settings appear to be ZXing-specific extensions. See
     # https://github.com/zxing/zxing/wiki/Barcode-Contents#wi-fi-network-config-android-ios-11
-    assert parms.get('802-1x.password')
+    if parms.get('802-1x.client-cert') or not parms.get('802-1x.password'):
+        p.error('cannot generate QR code for an EAP network using client certificates, or without a password')
     bits.update(T='WPA2-EAP', P=parms["802-1x.password"], E=parms["802-1x.eap"].upper())
     if parms.get('802-1x.anonymous-identity'):
         bits['A'] = parms["802-1x.anonymous-identity"]
