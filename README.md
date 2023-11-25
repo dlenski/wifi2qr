@@ -21,13 +21,24 @@ $ wifi2qr
 
 … which will display a barcode that you can read with your smartphone to connect to the
 network. Tested with Android's `zxing`-based
-[Barcode Scanner](https://play.google.com/store/apps/details?id=com.google.zxing.client.android).
+[Barcode Scanner](https://play.google.com/store/apps/details?id=com.google.zxing.client.android),
+the somewhat more modern
+[QR & Barcode Scanner](https://f-droid.org/en/packages/com.example.barcodescanner),
+and the iPhone Camera app.
 
 ![WIFI:S:ExampleWPA;T:WPA;P:ExamplePassword;;](example.png)
 
 You can also share a specific connection, by its NetworkManager
 connection name or UUID with `wifi2qr CONNECTION`.
-(You can list known WiFi connections with `wifi2qr -l`.)
+
+You can list known WiFi connections with `wifi2qr -l`.
+
+Note: **only** `zxing`-based apps appear to support [the E/A/I/PH2
+fields which are needed to configure WPA-EAP ("Enterprise") WiFi
+networks](https://github.com/zxing/zxing/wiki/Barcode-Contents#wi-fi-network-config-android-ios-11);
+those fields are _not_ present in the official-ish
+[WPA3 specification](https://www.wi-fi.org/system/files/WPA3%20Specification%20v3.1.pdf)
+for WiFi URIs.
 
 ### Complete options
 
