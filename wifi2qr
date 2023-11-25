@@ -61,10 +61,20 @@ if [[ $show_help == true ]]; then
 elif [[ $show_list == true ]]; then
     IFS=:
     echo "Known WiFi connections:" >&2
-    nmcli -s -t -f "name,type" conn |
-    while read name type
+    nmcli -t -f "uuid,name,type" conn |
+    while read uuid name type
     do
-        [[ "$type" == "802-11-wireless" ]] && echo "  $name" >&2
+        if [[ "$type" == "802-11-wireless" ]]; then
+            echo -n "  $name" >&2
+            sec=$(nmcli -t -f 802-11-wireless-security.key-mgmt conn show "$uuid" | cut -d: -f2)
+            case $sec in
+                "") echo " (OPEN)" >&2 ;;
+                wpa-psk) echo " (WPAx-PSK)" >&2 ;;
+                wpa-eap) echo " (WPAx-EAP)" >&2 ;;
+                sae) echo " (WPA3-SAE)" >&2 ;;
+                *) echo " (unknown: $sec)" >&2 ;;
+            esac
+        fi
     done
     exit 1
 fi
