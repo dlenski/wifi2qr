@@ -88,6 +88,19 @@ except RuntimeError as exc:
     else:
         raise
 
+def raw_and_maybe_text(raw):
+    if raw is None:
+        return None, None
+    elif raw[:1] == '"' and raw[-1:] == '"':
+        r = t = raw[1:-1]
+    else:
+        try:
+            r = unhexlify(raw)
+            t = r.decode('utf8')
+        except ValueError:
+            r = t = raw
+    return r, t
+
 @dataclass
 class EAP:
     client_cert: str | None
@@ -100,14 +113,14 @@ class EAP:
 @dataclass
 class WifiNetwork:
     configkey: str
-    connected: bool
-    broken: bool
-    hidden: bool
     ssid: str | bytes
     ssid_t: str
-    psk: str | bytes | None
-    psk_t: str | bytes | None
-    eap: EAP | None
+    psk: str | bytes | None = None
+    psk_t: str | None = None
+    eap: EAP | None = None
+    connected: bool = False
+    broken: bool = False
+    hidden: bool = False
 
     @classmethod
     def munge_xml(cls, nn):
@@ -147,18 +160,8 @@ class WifiNetwork:
                 client_cert=client_cert, identity=identity, anon_identity=anon_identity,
                 password=password, method=method, phase2_method=phase2_method)
 
-        ssid = nn.findtext("WifiConfiguration/string[@name='SSID']")
-        if ssid[:1] == ssid[-1:] == '"':
-            ssid_t = ssid[1:-1]
-        else:
-            ssid_t = ssid
-        psk = nn.findtext("WifiConfiguration/string[@name='PreSharedKey']")
-        if not psk:
-            psk_t = None
-        elif psk[:1] == psk[-1:] == '"':
-            psk_t = psk[1:-1]
-        else:
-            psk_t = psk
+        ssid, ssid_t = raw_and_maybe_text(nn.findtext("WifiConfiguration/string[@name='SSID']"))
+        psk, psk_t = raw_and_maybe_text(nn.findtext("WifiConfiguration/string[@name='PreSharedKey']"))
 
         return cls(
             configkey=configkey,
