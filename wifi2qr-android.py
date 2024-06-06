@@ -128,24 +128,33 @@ class WifiNetwork:
     connected: bool = False
     broken: bool = False
     hidden: bool = False
+    timestamp: int | None = None
 
     @classmethod
     def munge_xml(cls, nn):
         status = nn.find("WifiConfiguration/int[@name='Status']")
+        connected = broken = None
+
+        via = nn.find("WifiConfiguration/boolean[@name='ValidatedInternetAccess']")
         hec = nn.find("NetworkStatus/boolean[@name='HasEverConnected']")
-        if status is not None:
-            connected = (int(status.attrib.get('value', '1')) == 0)
-            broken = (int(status.attrib.get('value', '1')) == 1)
+        if via is not None:
+            broken = (via.attrib.get('value', 'false') == 'false')
         elif hec is not None:
-            connected = False
             broken = (hec.attrib.get('value', 'false') == 'false')
-        else:
-            connected = False
-            broken = True
+
+        if status is not None:
+            val = int(status.attrib.get('value', '1'))
+            connected = (val == 0)
+            broken = (val == 1)
 
         hidden = nn.find("WifiConfiguration/boolean[@name='HiddenSSID']")
         if hidden is not None:
             hidden = (hidden.attrib.get('value', 'false') == 'true')
+
+        timestamp = nn.find("NetworkStatus/long[@name='ConnectChoiceTimeStamp']")
+        if timestamp is not None:
+            val = int(timestamp.attrib.get('value', '-1'))
+            timestamp = val if val != -1 else None
 
         configkey = nn.findtext("WifiConfiguration/string[@name='ConfigKey']")
 
@@ -172,7 +181,7 @@ class WifiNetwork:
 
         return cls(
             configkey=configkey,
-            connected=connected, broken=broken, hidden=hidden,
+            connected=connected, broken=broken, hidden=hidden, timestamp=timestamp,
             ssid=ssid, ssid_t=ssid_t,
             psk=psk, psk_t=psk_t,
             eap=eap,
@@ -214,10 +223,12 @@ def get_hotspot(device):
             pos += psk_len
         assert pos == len(contents)
 
+        mtime = int(device.shell(f"date -r '{path.replace("'", "\\'")}' +%s")) * 1000
         ssid, ssid_t = raw_and_maybe_text(ssid)
         psk, psk_t = raw_and_maybe_text(psk)
         return WifiNetwork(
-            configkey='Android hotspot', ssid=ssid, ssid_t=ssid_t, psk=psk, psk_t=psk_t)
+            configkey='Android hotspot', ssid=ssid, ssid_t=ssid_t, psk=psk, psk_t=psk_t,
+            timestamp=mtime)
 
 def get_wcs(device):
     with tempfile.NamedTemporaryFile(prefix='WifiConfigStore_', suffix='.xml') as tf:
