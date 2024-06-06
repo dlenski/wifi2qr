@@ -3,6 +3,7 @@
 import argparse
 from sys import stderr
 from binascii import hexlify, unhexlify
+import struct
 from os.path import splitext
 import tempfile
 from xml.etree import ElementTree as ET
@@ -89,9 +90,14 @@ except RuntimeError as exc:
     else:
         raise
 
-def raw_and_maybe_text(raw):
+def raw_and_maybe_text(raw: bytes | str | None):
     if raw is None:
         return None, None
+    elif isinstance(raw, bytes):
+        try:
+            r, t = raw, raw.decode('utf8')
+        except ValueError:
+            r = t = hexlify(raw).decode()
     elif raw[:1] == '"' and raw[-1:] == '"':
         r = t = raw[1:-1]
     else:
@@ -173,21 +179,40 @@ class WifiNetwork:
         )
 
 def get_hotspot(device):
-    with tempfile.NamedTemporaryFile(prefix='hostapd_', suffix='.conf', mode='w+') as tf:
-        path = '/data/misc/wifi/hostapd.conf'
+    with tempfile.NamedTemporaryFile(prefix='softap_', suffix='.conf', mode='w+b') as tf:
+        path = '/data/misc/wifi/softap.conf'
         err = device.pull(path, tf.name)
         if err:
-            raise RuntimeError(f"Error pulling hostapd.conf from device: {err}")
+            raise RuntimeError(f"Error pulling softap.conf from device: {err}")
         tf.seek(0)
+        contents = tf.read()
 
-        conf = {lhs.strip(): rhs.strip() for (lhs, rhs) in (
-            l.split('=', 1) for l in tf if not l.startswith('#') and l.strip())}
-        ssid = next((conf[k] for k in conf if k.startswith('ssid')), None)   # sometimes ssid2?
-        wpa = conf.get('wpa')
-        psk = conf.get('wpa_psk')
+        # Newer versions of Android have apparently moved this to the WifiConfigStore.xml:
+        # https://android.googlesource.com/platform/frameworks/base/+/master/wifi/java/src/android/net/wifi/SoftApConfToXmlMigrationUtil.java#111
+        version, ssid_len = struct.unpack_from('>IH', contents, 0)
+        assert 1 <= version <= 3
+        if not args.quiet:
+            print(f"Pulled {path} from Android device (softap.conf v{version})")
 
-        if not ssid or (psk and not wpa):
-            raise RuntimeError(f"Couldn't interpret hostapd.conf from device: {conf}")
+        ssid, = struct.unpack_from(f'>{ssid_len}s', contents, pos := 6)
+        pos += ssid_len
+        hidden = band = channel = psk = None
+        if version >= 2:
+            band, channel = struct.unpack_from('>2I', contents, pos)
+            pos += 8
+            if version >= 3:
+                hidden, = struct.unpack_from('>?', contents, pos)
+                pos += 1
+
+        auth_type, = struct.unpack_from('>I', contents, pos)
+        pos += 4
+        assert auth_type in (0, 4)  # None, WPA2_PSK (https://developer.android.com/reference/android/net/wifi/WifiConfiguration.KeyMgmt#WPA2_PSK)
+        if auth_type == 4:
+            psk_len, = struct.unpack_from('>H', contents, pos)
+            pos += 2
+            psk, = struct.unpack_from(f'>{psk_len}s', contents, pos)
+            pos += psk_len
+        assert pos == len(contents)
 
         ssid, ssid_t = raw_and_maybe_text(ssid)
         psk, psk_t = raw_and_maybe_text(psk)
