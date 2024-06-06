@@ -90,23 +90,34 @@ except RuntimeError as exc:
     else:
         raise
 
-def raw_and_maybe_text(raw: bytes | str | None):
+def raw_and_maybe_text(raw: bytes | str | None) -> tuple[bytes | None, str | None]:
     if raw is None:
+        # None -> None, None
         return None, None
     elif isinstance(raw, bytes):
         try:
-            r, t = raw, raw.decode('utf8')
+            # b'foo' -> b'foo', 'foo'
+            return raw, raw.decode('utf8')
         except ValueError:
-            r = t = hexlify(raw).decode()
+            # b'\xf0\x00' -> b'\xf00\x00', 'f000'
+            return raw, hexlify(raw).decode()
     elif raw[:1] == '"' and raw[-1:] == '"':
-        r = t = raw[1:-1]
+        # '"foo"' -> b'foo', 'foo'
+        t = raw[1:-1]
+        return t.encode('utf8'), t
     else:
         try:
-            r = unhexlify(raw)
-            t = r.decode('utf8')
+            # 'f00f' -> b'\xf0\x0f', 'f00f'
+            return unhexlify(raw), raw
         except ValueError:
-            r = t = raw
-    return r, t
+            # 'foo' -> b'foo', 'foo'
+            return raw.encode('utf8'), raw
+
+assert raw_and_maybe_text(b'foo') == (b'foo', 'foo')
+assert raw_and_maybe_text(b'\xf0\x00') == (b'\xf0\x00', 'f000')
+assert raw_and_maybe_text('"foo"') == (b'foo', 'foo')
+assert raw_and_maybe_text('f00f') == (b'\xf0\x0f', 'f00f')
+assert raw_and_maybe_text('foo') == (b'foo', 'foo')
 
 @dataclass
 class EAP:
