@@ -55,6 +55,7 @@ p.add_argument('-d', '--device', help='ADB serial number of device to connect to
 x = p.add_mutually_exclusive_group()
 x.add_argument('-l', '--list', action='store_true')
 x.add_argument('connection', nargs='?', help='Android ConfigKey name or SSID for WiFi connection')
+x.add_argument('--hotspot', action='store_true', help="Fetch WiFi hotspot configuration from Android device")
 x = p.add_mutually_exclusive_group()
 x.add_argument('-a', '--ansi', dest='display', default='UTF8', action='store_const', const='ANSI')
 x.add_argument('-i', '--ImageMagick', dest='display', action='store_const', const='ImageMagick')
@@ -171,26 +172,56 @@ class WifiNetwork:
             eap=eap,
         )
 
-with tempfile.NamedTemporaryFile(prefix='WifiConfigStore_', suffix='.xml') as tf:
-    for path in _WCS_PATHS:
+def get_hotspot(device):
+    with tempfile.NamedTemporaryFile(prefix='hostapd_', suffix='.conf', mode='w+') as tf:
+        path = '/data/misc/wifi/hostapd.conf'
         err = device.pull(path, tf.name)
-        if err is None:
-            break
-    else:
-        raise RuntimeError(f"Error pulling WifiConfigStore.xml from device: {err}")
-    tf.seek(0)
-    xml = ET.parse(tf)
+        if err:
+            raise RuntimeError(f"Error pulling hostapd.conf from device: {err}")
+        tf.seek(0)
 
-    version = xml.find("./int[@name='Version']")
-    if version is not None:
-        version = version.attrib.get('value')
-    if not args.quiet:
-        print(f"Pulled {path} from Android device (WifiConfigStore v{version})")
-    networks=sorted(
-        [WifiNetwork.munge_xml(nn) for nn in xml.findall('./NetworkList/Network')],
-        key=lambda nn: (not nn.connected, nn.broken, nn.ssid_t, nn.configkey))
+        conf = {lhs.strip(): rhs.strip() for (lhs, rhs) in (
+            l.split('=', 1) for l in tf if not l.startswith('#') and l.strip())}
+        ssid = next((conf[k] for k in conf if k.startswith('ssid')), None)   # sometimes ssid2?
+        wpa = conf.get('wpa')
+        psk = conf.get('wpa_psk')
+
+        if not ssid or (psk and not wpa):
+            raise RuntimeError(f"Couldn't interpret hostapd.conf from device: {conf}")
+
+        ssid, ssid_t = raw_and_maybe_text(ssid)
+        psk, psk_t = raw_and_maybe_text(psk)
+        return WifiNetwork(
+            configkey='Android hotspot', ssid=ssid, ssid_t=ssid_t, psk=psk, psk_t=psk_t)
+
+def get_wcs(device):
+    with tempfile.NamedTemporaryFile(prefix='WifiConfigStore_', suffix='.xml') as tf:
+        for path in _WCS_PATHS:
+            err = device.pull(path, tf.name)
+            if err is None:
+                break
+        else:
+            raise RuntimeError(f"Error pulling WifiConfigStore.xml from device: {err}")
+        tf.seek(0)
+        xml = ET.parse(tf)
+
+        version = xml.find("./int[@name='Version']")
+        if version is not None:
+            version = version.attrib.get('value')
+        if not args.quiet:
+            print(f"Pulled {path} from Android device (WifiConfigStore v{version})")
+        return sorted(
+            (WifiNetwork.munge_xml(nn) for nn in xml.findall('./NetworkList/Network')),
+            key=lambda nn: (not nn.connected, nn.broken,
+                            nn.ssid_t, nn.configkey))
 
 if args.list:
+    networks = get_wcs(device)
+    try:
+        networks.insert(0, get_hotspot(device))
+    except RuntimeError:
+        pass
+
     print('Known WiFi connections:', file=stderr)
     for nn in networks:
         if nn.eap:
@@ -203,19 +234,25 @@ if args.list:
         print(f'  [{sec:8s}] SSID {nn.ssid_t:34} (Android ConfigKey name: {nn.configkey})', file=stderr)
     p.exit(1)
 
-if not args.connection:
+if args.hotspot:
+    try:
+        nn = get_hotspot(device)
+    except RuntimeError as exc:
+        p.error(f"Could not determine Android device's WiFi hotspot configuration: {exc.args[0]}")
+elif not args.connection:
     # Get the [first] active connection
-    if networks and networks[0].connected:
-        nn = networks[0]
+    networks = get_wcs(device)
+    nn = next((nn for nn in networks if nn.connected), None)
+    if nn:
         print(f'Using currently-active WiFi connection from Android device {nn.configkey}')
     else:
         p.error('Could not find a currently-active WiFi connection on Android device')
 else:
-    for nn in networks:
-        if args.connection in (nn.ssid_t, nn.configkey):
-            if not args.quiet:
-                print(f'Using WiFi connection {nn.configkey} from Android device...', file=stderr)
-            break
+    networks = get_wcs(device)
+    nn = next((nn for nn in networks if args.connection in (nn.ssid_t, nn.configkey)), None)
+    if nn:
+        if not args.quiet:
+            print(f'Using WiFi connection {nn.configkey} from Android device...', file=stderr)
     else:
         p.error(f'Could not find WiFi connection on Android device with ConfigKey or SSID of {args.connection!r}')
 
