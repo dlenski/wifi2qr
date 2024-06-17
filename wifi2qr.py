@@ -4,6 +4,7 @@ import argparse
 from sys import stderr
 from binascii import hexlify
 from os.path import splitext
+from hashlib import pbkdf2_hmac
 
 import pydbus
 from qrcode import QRCode
@@ -39,6 +40,7 @@ x.add_argument('-a', '--ansi', dest='display', default='UTF8', action='store_con
 x.add_argument('-i', '--ImageMagick', dest='display', action='store_const', const='ImageMagick')
 x.add_argument('-o', '--output', type=argparse.FileType('wb'))
 p.add_argument('-q', '--quiet', action='store_true', help='Quiet mode (suppress printing of barcode in text form to stderr)')
+p.add_argument('-P', '--psk', action='store_true', help='Scramble plaintext WPA2 passwords into hexadecimal pre-shared keys')
 args = p.parse_args()
 
 bus = pydbus.SystemBus()
@@ -116,8 +118,13 @@ if eap:
         bits['PH2'] = eap['phase2-auth'].upper()
 elif ws:
     psk = sc.GetSecrets('802-11-wireless-security')['802-11-wireless-security'].get('psk')
+    if ws.get('key-mgmt') == 'wpa-psk' and len(psk) < 64 and args.psk:
+        psk_t = hexlify(pbkdf2_hmac('sha1', psk.encode('ascii'), ssid, 4096, 32)).decode()  # http://jorisvr.nl/wpapsk.html
+    else:
+        psk_t = psk   # already PSK-ified, or no PSK desired
+
     if psk:
-        bits.update(T='WPA', P=psk)
+        bits.update(T='WPA', P=psk_t)
     if ws.get('key-mgmt') == 'sae':
         # WPA2/WPA3 transition disable
         # See https://superuser.com/a/1752085 and https://www.wi-fi.org/system/files/WPA3%20Specification%20v3.1.pdf secetion 7
