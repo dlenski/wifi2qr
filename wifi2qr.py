@@ -56,7 +56,7 @@ if args.list:
             sec = config.get('802-11-wireless-security', {}).get('key-mgmt')
             ssid = bytes(config['802-11-wireless']['ssid'])
             try:
-                ssid_t = repr(ssid.decode())
+                ssid_t = repr(ssid.decode('ascii'))
             except UnicodeDecodeError:
                 ssid_t = hexlify(ssid).decode()
             print(f'  [{_SECMAP.get(sec, sec):8s}] SSID {ssid_t:34} (NetworkManager name: {name})', file=stderr)
@@ -76,9 +76,9 @@ for path in settings.ListConnections():
     if config['connection']['type'] == '802-11-wireless':
         ssid = bytes(config['802-11-wireless']['ssid'])
         try:
-            ssid_t = ssid.decode()
+            ssid_t = ssid.decode('ascii')
         except UnicodeDecodeError:
-            ssid_t = None
+            ssid_t = hexlify(ssid).decode()
 
         if not args.connection and path in apaths:
             if not args.quiet:
@@ -95,7 +95,7 @@ else:
         p.error(f'Could not find a currently-active NetworkManager WiFi connection')
 
 w, ws, eap = config['802-11-wireless'], config.get('802-11-wireless-security', {}), config.get('802-1x', {})
-bits = dict(S=bytes(w['ssid']).decode())  # FIXME: non-UTF8 SSID?
+bits = dict(S=ssid_t)
 if w.get('hidden') == 'yes':
     bits['H'] = 'true'
 
