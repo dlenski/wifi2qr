@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "wifi2qr"
+version = "0.1.0"
+description = ""
+authors = [ "Daniel Lenski <dlenski@gmail.com>" ]
+license = "GPLv3 or later"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pure-python-adb = "*"
+pydbus = "*"
+qrcode = "*"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

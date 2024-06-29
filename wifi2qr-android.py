@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/usr/bin/env python3
 
 import argparse
 from sys import stderr
@@ -6,8 +6,10 @@ from binascii import hexlify, unhexlify
 import struct
 from os.path import splitext
 import tempfile
+import shlex
 from xml.etree import ElementTree as ET
 from dataclasses import dataclass
+from hashlib import pbkdf2_hmac
 
 import ppadb.client
 from qrcode import QRCode
@@ -62,12 +64,13 @@ x.add_argument('-a', '--ansi', dest='display', default='UTF8', action='store_con
 x.add_argument('-i', '--ImageMagick', dest='display', action='store_const', const='ImageMagick')
 x.add_argument('-o', '--output', type=argparse.FileType('wb'))
 p.add_argument('-q', '--quiet', action='store_true', help='Quiet mode (suppress printing of barcode in text form to stderr)')
+p.add_argument('-P', '--psk', action='store_true', help='Scramble plaintext WPA2 passwords into hexadecimal pre-shared keys')
 args = p.parse_args()
 
 cli = ppadb.client.Client()
 try:
     cli.create_connection()
-except RuntimeError as exc:
+except RuntimeError:
     p.error("Error connecting to local ADB server (try 'adb connect IP[:PORT]' or 'adb mdns services' to find devices on local network).")
 
 if args.device:
@@ -234,7 +237,7 @@ def get_hotspot(device):
             pos += psk_len
         assert pos == len(contents)
 
-        mtime = int(device.shell(f"date -r '{path.replace("'", "\\'")}' +%s")) * 1000
+        mtime = int(device.shell(f"date -r {shlex.quote(path)} +%s")) * 1000
         ssid, ssid_t = raw_and_maybe_text(ssid)
         psk, psk_t = raw_and_maybe_text(psk)
         return WifiNetwork(
@@ -323,7 +326,11 @@ if nn.eap:
     if nn.eap.phase2_method:
         bits['PH2'] = nn.eap.phase2_method.upper()
 elif nn.psk:
-    bits.update(T='WPA', P=nn.psk_t)
+    if len(nn.psk_t) < 64 and args.psk:
+        psk_t = pbkdf2_hmac('sha1', nn.psk, nn.ssid, 4096, 32).hex()  # http://jorisvr.nl/wpapsk.html
+    else:
+        psk_t = nn.psk_t   # already PSK-ified, or no PSK
+    bits.update(T='WPA', P=psk_t)
     #if ws.get('key-mgmt') == 'sae':
     #    # WPA2/WPA3 transition disable
     #    # See https://superuser.com/a/1752085 and https://www.wi-fi.org/system/files/WPA3%20Specification%20v3.1.pdf secetion 7
