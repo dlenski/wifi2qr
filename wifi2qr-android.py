@@ -46,14 +46,6 @@ _WCSSA_PATHS = (
     '/data/misc/apexdata/com.android.wifi/WifiConfigStoreSoftAp.xml',  # ?
 )
 
-def nmcli_tf(fields, *args):
-    args = [_NMCLI, '-t', '-f', ','.join(fields), *args]
-    for line in check_output(args, text=True).splitlines():
-        vals = line.split(':')
-        if len(vals) == 2:
-            yield vals[0], vals[1]
-        else:
-            yield vals[0], vals[1:]
 
 p = argparse.ArgumentParser(description=
     'Displays a QR code that can be scanned to connect to a WiFi network '
