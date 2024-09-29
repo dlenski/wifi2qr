@@ -41,6 +41,10 @@ _WCS_PATHS = (
     '/data/misc/wifi/WifiConfigStore.xml',                       # Android O (8.0)+
     '/data/misc/apexdata/com.android.wifi/WifiConfigStore.xml',  # Android R (11.0)+
 )
+_WCSSA_PATHS = (
+    '/data/misc/wifi/WifiConfigStoreSoftAp.xml',                       # ?
+    '/data/misc/apexdata/com.android.wifi/WifiConfigStoreSoftAp.xml',  # ?
+)
 
 def nmcli_tf(fields, *args):
     args = [_NMCLI, '-t', '-f', ','.join(fields), *args]
@@ -152,6 +156,16 @@ class WifiNetwork:
     timestamp: Optional[int] = None
 
     @classmethod
+    def munge_xml_ap(cls, nn):
+        ssid, ssid_t = raw_and_maybe_text(nn.findtext("SoftAp/string[@name='WifiSsid']"))
+        psk, psk_t = raw_and_maybe_text(nn.findtext("SoftAp/string[@name='Passphrase']"))
+        hidden = nn.find("SoftAp/boolean[@name='HiddenSSID']")
+        if hidden is not None:
+            hidden = (hidden.attrib.get('value', 'false') == 'true')
+
+        return cls(configkey='Android hotspot', hidden=hidden, ssid=ssid, ssid_t=ssid_t, psk=psk, psk_t=psk_t)
+    
+    @classmethod
     def munge_xml(cls, nn):
         status = nn.find("WifiConfiguration/int[@name='Status']")
         connected = broken = None
@@ -208,7 +222,28 @@ class WifiNetwork:
             eap=eap,
         )
 
+    
 def get_hotspot(device):
+    with tempfile.NamedTemporaryFile(prefix='WifiConfigStoreSoftAp_', suffix='.xml') as tf:
+        for path in _WCSSA_PATHS:
+            if use_su:
+                *lines, res = device.shell(f"set -o pipefail; su -c cat {shlex.quote(path)} | base64; echo $?").splitlines()
+                if int(res) == 0:
+                    err = None
+                    tf.writelines(a2b_base64(l) for l in lines)
+                else:
+                    err = res
+            else:
+                err = device.pull(path, tf.name)
+            if err is None:
+                mtime = int(device.shell(f"su -c date -r {shlex.quote(path)} +%s")) * 1000
+                tf.seek(0)
+                xml = ET.parse(tf)
+
+                n = WifiNetwork.munge_xml_ap(xml)
+                n.timestamp = mtime
+                return n
+
     with tempfile.NamedTemporaryFile(prefix='softap_', suffix='.conf', mode='w+b') as tf:
         path = '/data/misc/wifi/softap.conf'
         if use_su:
@@ -224,40 +259,47 @@ def get_hotspot(device):
             raise RuntimeError(f"Error pulling softap.conf from device: {err}")
         tf.seek(0)
         contents = tf.read()
-
-        # Newer versions of Android have apparently moved this to the WifiConfigStore.xml:
-        # https://android.googlesource.com/platform/frameworks/base/+/master/wifi/java/src/android/net/wifi/SoftApConfToXmlMigrationUtil.java#111
-        version, ssid_len = struct.unpack_from('>IH', contents, 0)
-        assert 1 <= version <= 3
-        if not args.quiet:
-            print(f"Pulled {path} from Android device (softap.conf v{version})")
-
-        ssid, = struct.unpack_from(f'>{ssid_len}s', contents, pos := 6)
-        pos += ssid_len
-        hidden = band = channel = psk = None
-        if version >= 2:
-            band, channel = struct.unpack_from('>2I', contents, pos)
-            pos += 8
-            if version >= 3:
-                hidden, = struct.unpack_from('>?', contents, pos)
-                pos += 1
-
-        auth_type, = struct.unpack_from('>I', contents, pos)
-        pos += 4
-        assert auth_type in (0, 4)  # None, WPA2_PSK (https://developer.android.com/reference/android/net/wifi/WifiConfiguration.KeyMgmt#WPA2_PSK)
-        if auth_type == 4:
-            psk_len, = struct.unpack_from('>H', contents, pos)
-            pos += 2
-            psk, = struct.unpack_from(f'>{psk_len}s', contents, pos)
-            pos += psk_len
-        assert pos == len(contents)
-
         mtime = int(device.shell(f"su -c date -r {shlex.quote(path)} +%s")) * 1000
-        ssid, ssid_t = raw_and_maybe_text(ssid)
-        psk, psk_t = raw_and_maybe_text(psk)
-        return WifiNetwork(
-            configkey='Android hotspot', ssid=ssid, ssid_t=ssid_t, psk=psk, psk_t=psk_t,
-            timestamp=mtime)
+        
+        n = get_hotspot_old(path, contents)
+        n.timestamp = mtime
+        return n
+
+    raise RuntimeError(f"Error pulling WifiConfigStoreSoftAp.xml or softap.conf from device: {err}")
+
+
+def get_hotspot_old(path, contents):
+    # Newer versions of Android have apparently moved this to the WifiConfigStore.xml:
+    # https://android.googlesource.com/platform/frameworks/base/+/master/wifi/java/src/android/net/wifi/SoftApConfToXmlMigrationUtil.java#111
+    version, ssid_len = struct.unpack_from('>IH', contents, 0)
+    assert 1 <= version <= 3
+    if not args.quiet:
+        print(f"Pulled {path} from Android device (softap.conf v{version})")
+
+    ssid, = struct.unpack_from(f'>{ssid_len}s', contents, pos := 6)
+    pos += ssid_len
+    hidden = band = channel = psk = None
+    if version >= 2:
+        band, channel = struct.unpack_from('>2I', contents, pos)
+        pos += 8
+        if version >= 3:
+            hidden, = struct.unpack_from('>?', contents, pos)
+            pos += 1
+
+    auth_type, = struct.unpack_from('>I', contents, pos)
+    pos += 4
+    assert auth_type in (0, 4)  # None, WPA2_PSK (https://developer.android.com/reference/android/net/wifi/WifiConfiguration.KeyMgmt#WPA2_PSK)
+    if auth_type == 4:
+        psk_len, = struct.unpack_from('>H', contents, pos)
+        pos += 2
+        psk, = struct.unpack_from(f'>{psk_len}s', contents, pos)
+        pos += psk_len
+    assert pos == len(contents)
+
+    ssid, ssid_t = raw_and_maybe_text(ssid)
+    psk, psk_t = raw_and_maybe_text(psk)
+    return WifiNetwork(
+        configkey='Android hotspot', ssid=ssid, ssid_t=ssid_t, psk=psk, psk_t=psk_t)
 
 def get_wcs(device):
     with tempfile.NamedTemporaryFile(prefix='WifiConfigStore_', suffix='.xml') as tf:
