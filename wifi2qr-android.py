@@ -2,7 +2,7 @@
 
 import argparse
 from sys import stderr
-from binascii import hexlify, unhexlify
+from binascii import hexlify, unhexlify, a2b_base64
 import struct
 from os.path import splitext
 import tempfile
@@ -83,6 +83,7 @@ elif cli.devices():
 else:
     p.error("No currently connected Android device (try 'adb connect IP[:PORT]' or 'adb mdns services' to find devices on local network).")
 
+use_su = False
 try:
     device.root()
     if not args.quiet:
@@ -92,7 +93,12 @@ except RuntimeError as exc:
         if not args.quiet:
             print('Already have ADB root access to device.', file=stderr)
     else:
-        raise
+        if int(device.shell('su -c true; echo $?').splitlines()[-1]) == 0:
+            use_su = True
+            if not args.quiet:
+                print("Couldn't enable ADBD as root, but can use 'su' (see https://stackoverflow.com/a/28070414)", file=stderr)
+        else:
+            p.error('Could not get ADB root access to device.')
 
 def raw_and_maybe_text(raw: Union[bytes, str, None]) -> tuple[Optional[bytes], Optional[str]]:
     if raw is None:
@@ -205,7 +211,15 @@ class WifiNetwork:
 def get_hotspot(device):
     with tempfile.NamedTemporaryFile(prefix='softap_', suffix='.conf', mode='w+b') as tf:
         path = '/data/misc/wifi/softap.conf'
-        err = device.pull(path, tf.name)
+        if use_su:
+            *lines, res = device.shell(f"set -o pipefail; su -c cat {shlex.quote(path)} | base64; echo $?").splitlines()
+            if int(res) == 0:
+                err = None
+                tf.writelines(a2b_base64(l) for l in lines)
+            else:
+                err = res
+        else:
+            err = device.pull(path, tf.name)
         if err:
             raise RuntimeError(f"Error pulling softap.conf from device: {err}")
         tf.seek(0)
@@ -238,7 +252,7 @@ def get_hotspot(device):
             pos += psk_len
         assert pos == len(contents)
 
-        mtime = int(device.shell(f"date -r {shlex.quote(path)} +%s")) * 1000
+        mtime = int(device.shell(f"su -c date -r {shlex.quote(path)} +%s")) * 1000
         ssid, ssid_t = raw_and_maybe_text(ssid)
         psk, psk_t = raw_and_maybe_text(psk)
         return WifiNetwork(
@@ -248,7 +262,15 @@ def get_hotspot(device):
 def get_wcs(device):
     with tempfile.NamedTemporaryFile(prefix='WifiConfigStore_', suffix='.xml') as tf:
         for path in _WCS_PATHS:
-            err = device.pull(path, tf.name)
+            if use_su:
+                *lines, res = device.shell(f"set -o pipefail; su -c cat {shlex.quote(path)} | base64; echo $?").splitlines()
+                if int(res) == 0:
+                    err = None
+                    tf.writelines(a2b_base64(l) for l in lines)
+                else:
+                    err = res
+            else:
+                err = device.pull(path, tf.name)
             if err is None:
                 break
         else:
