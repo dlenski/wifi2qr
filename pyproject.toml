@@ -7,7 +7,7 @@ license = "GPLv3 or later"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 pure-python-adb = "*"
 pydbus = "*"
 qrcode = "*"

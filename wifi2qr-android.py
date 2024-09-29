@@ -10,6 +10,7 @@ import shlex
 from xml.etree import ElementTree as ET
 from dataclasses import dataclass
 from hashlib import pbkdf2_hmac
+from typing import Union, Optional
 
 import ppadb.client
 from qrcode import QRCode
@@ -93,7 +94,7 @@ except RuntimeError as exc:
     else:
         raise
 
-def raw_and_maybe_text(raw: bytes | str | None) -> tuple[bytes | None, str | None]:
+def raw_and_maybe_text(raw: Union[bytes, str, None]) -> tuple[Optional[bytes], Optional[str]]:
     if raw is None:
         # None -> None, None
         return None, None
@@ -124,25 +125,25 @@ assert raw_and_maybe_text('foo') == (b'foo', 'foo')
 
 @dataclass
 class EAP:
-    client_cert: str | None
-    password: str | None
-    anon_identity: str | None
-    identity: str | None
-    method: str | None
-    phase2_method: str | None
+    client_cert: Optional[str]
+    password: Optional[str]
+    anon_identity: Optional[str]
+    identity: Optional[str]
+    method: Optional[str]
+    phase2_method: Optional[str]
 
 @dataclass
 class WifiNetwork:
     configkey: str
-    ssid: str | bytes
+    ssid: Union[str, bytes]
     ssid_t: str
-    psk: str | bytes | None = None
-    psk_t: str | None = None
-    eap: EAP | None = None
+    psk: Union[str, bytes, None] = None
+    psk_t: Optional[str] = None
+    eap: Optional[EAP] = None
     connected: bool = False
     broken: bool = False
     hidden: bool = False
-    timestamp: int | None = None
+    timestamp: Optional[int] = None
 
     @classmethod
     def munge_xml(cls, nn):
