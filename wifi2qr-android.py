@@ -219,7 +219,7 @@ def get_hotspot(device):
     with tempfile.NamedTemporaryFile(prefix='WifiConfigStoreSoftAp_', suffix='.xml') as tf:
         for path in _WCSSA_PATHS:
             if use_su:
-                *lines, res = device.shell(f"set -o pipefail; su -c cat {shlex.quote(path)} | base64; echo $?").splitlines()
+                *lines, res = device.shell(f"set -o pipefail; su -c {shlex.quote('cat ' + shlex.quote(path))} | base64; echo $?").splitlines()
                 if int(res) == 0:
                     err = None
                     tf.writelines(a2b_base64(l) for l in lines)
@@ -228,7 +228,7 @@ def get_hotspot(device):
             else:
                 err = device.pull(path, tf.name)
             if err is None:
-                mtime = int(device.shell(f"su -c date -r {shlex.quote(path)} +%s")) * 1000
+                mtime = int(device.shell(f"su -c {shlex.quote('date -r ' + shlex.quote(path) + ' +%s')}")) * 1000
                 tf.seek(0)
                 xml = ET.parse(tf)
 
@@ -239,7 +239,7 @@ def get_hotspot(device):
     with tempfile.NamedTemporaryFile(prefix='softap_', suffix='.conf', mode='w+b') as tf:
         path = '/data/misc/wifi/softap.conf'
         if use_su:
-            *lines, res = device.shell(f"set -o pipefail; su -c cat {shlex.quote(path)} | base64; echo $?").splitlines()
+            *lines, res = device.shell(f"set -o pipefail; su -c {shlex.quote('cat ' + shlex.quote(path))} | base64; echo $?").splitlines()
             if int(res) == 0:
                 err = None
                 tf.writelines(a2b_base64(l) for l in lines)
@@ -251,7 +251,7 @@ def get_hotspot(device):
             raise RuntimeError(f"Error pulling softap.conf from device: {err}")
         tf.seek(0)
         contents = tf.read()
-        mtime = int(device.shell(f"su -c date -r {shlex.quote(path)} +%s")) * 1000
+        mtime = int(device.shell(f"su -c {shlex.quote('date -r ' + shlex.quote(path) + ' +%s')}")) * 1000
         
         n = get_hotspot_old(path, contents)
         n.timestamp = mtime
@@ -297,7 +297,7 @@ def get_wcs(device):
     with tempfile.NamedTemporaryFile(prefix='WifiConfigStore_', suffix='.xml') as tf:
         for path in _WCS_PATHS:
             if use_su:
-                *lines, res = device.shell(f"set -o pipefail; su -c cat {shlex.quote(path)} | base64; echo $?").splitlines()
+                *lines, res = device.shell(f"set -o pipefail; su -c {shlex.quote('cat ' + shlex.quote(path))} | base64; echo $?").splitlines()
                 if int(res) == 0:
                     err = None
                     tf.writelines(a2b_base64(l) for l in lines)
