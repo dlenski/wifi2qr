@@ -19,8 +19,13 @@ from qrcode import QRCode
 # https://blog.digital-forensics.it/2024/02/dissecting-android-wificonfigstorexml.html
 # I later found another project that munges this file:
 # https://github.com/mnalis/android-wifi-upgrade/blob/master/convert_wifi.pl
-# To reload this file we need to stop and restart wifi on the device, something like this:
-# adb shell "nohup sh -c 'svc wifi disable; sleep 3; svc wifi enable' > /dev/null 2>&1"
+# To reload this file we need to stop and restart wifi on the device.
+# Something like this works on Android 8:
+#   adb shell "nohup sh -c 'svc wifi disable; sleep 3; svc wifi enable' > /dev/null 2>&1"
+# But on Android 14 this only happens on boot:
+#   See https://cs.android.com/android/platform/superproject/main/+/main:packages/modules/Wifi/service/java/com/android/server/wifi/WifiServiceImpl.java;l=592;drc=98e23de97cff0e9f1b4f3e6fc52d3d861f2f52b1;bpv=1;bpt=0
+#   And also try adb -d logcat -s 'WifiConfigStore WifiConfigManager WifiRoamingConfigStore WifiService'
+#   ... so in order to reread the wifi settings you have to do a "hot reboot" (e.g. 'killall system_server')
 
 # TODO: Use zeroconf to browse for devices advertising "_adb._tcp.local.", and
 # automatically connect.
@@ -37,6 +42,7 @@ _EAP_METHODS = {5: 'AKA', 6: 'AKA_PRIME', 0xffffffff: 'NONE', 0: 'PEAP', 3: 'PWD
 # https://developer.android.com/reference/android/net/wifi/WifiEnterpriseConfig.Phase2
 _EAP_PHASE2_METHODS = {0: 'NONE', 3: 'MSCHAPV2'} # ...
 # https://github.com/NeoApplications/Neo-Backup/blob/672dd22879c674aada640a4618fffd2f070d64a4/app/src/main/java/com/machiav3lli/backup/dbs/entity/SpecialInfo.kt#L192
+# https://cs.android.com/android/platform/superproject/main/+/main:frameworks/base/wifi/migration_samples/README.txt
 _WCS_PATHS = (
     '/data/misc/wifi/WifiConfigStore.xml',                       # Android O (8.0)+
     '/data/misc/apexdata/com.android.wifi/WifiConfigStore.xml',  # Android R (11.0)+
@@ -62,6 +68,7 @@ x.add_argument('-i', '--ImageMagick', dest='display', action='store_const', cons
 x.add_argument('-o', '--output', type=argparse.FileType('wb'))
 p.add_argument('-q', '--quiet', action='store_true', help='Quiet mode (suppress printing of barcode in text form to stderr)')
 p.add_argument('-P', '--psk', action='store_true', help='Scramble plaintext WPA2 passwords into hexadecimal pre-shared keys')
+p.add_argument('-r', '--raw', action='store_true', help=argparse.SUPPRESS)
 args = p.parse_args()
 
 cli = ppadb.client.Client()
@@ -146,6 +153,7 @@ class WifiNetwork:
     broken: bool = False
     hidden: bool = False
     timestamp: Optional[int] = None
+    raw: Union[str, bytes, None] = None
 
     @classmethod
     def munge_xml_ap(cls, nn):
@@ -155,8 +163,9 @@ class WifiNetwork:
         if hidden is not None:
             hidden = (hidden.attrib.get('value', 'false') == 'true')
 
-        return cls(configkey='Android hotspot', hidden=hidden, ssid=ssid, ssid_t=ssid_t, psk=psk, psk_t=psk_t)
-    
+        return cls(configkey='Android hotspot', hidden=hidden, ssid=ssid, ssid_t=ssid_t, psk=psk, psk_t=psk_t,
+                   raw=ET.tostring(nn, 'unicode'))
+
     @classmethod
     def munge_xml(cls, nn):
         status = nn.find("WifiConfiguration/int[@name='Status']")
@@ -211,10 +220,10 @@ class WifiNetwork:
             connected=connected, broken=broken, hidden=hidden, timestamp=timestamp,
             ssid=ssid, ssid_t=ssid_t,
             psk=psk, psk_t=psk_t,
-            eap=eap,
+            eap=eap, raw=ET.tostring(nn, 'unicode'),
         )
 
-    
+
 def get_hotspot(device):
     with tempfile.NamedTemporaryFile(prefix='WifiConfigStoreSoftAp_', suffix='.xml') as tf:
         for path in _WCSSA_PATHS:
@@ -232,7 +241,7 @@ def get_hotspot(device):
                 tf.seek(0)
                 xml = ET.parse(tf)
 
-                n = WifiNetwork.munge_xml_ap(xml)
+                n = WifiNetwork.munge_xml_ap(xml.getroot())
                 n.timestamp = mtime
                 return n
 
@@ -252,7 +261,7 @@ def get_hotspot(device):
         tf.seek(0)
         contents = tf.read()
         mtime = int(device.shell(f"su -c {shlex.quote('date -r ' + shlex.quote(path) + ' +%s')}")) * 1000
-        
+
         n = get_hotspot_old(path, contents)
         n.timestamp = mtime
         return n
@@ -291,7 +300,7 @@ def get_hotspot_old(path, contents):
     ssid, ssid_t = raw_and_maybe_text(ssid)
     psk, psk_t = raw_and_maybe_text(psk)
     return WifiNetwork(
-        configkey='Android hotspot', ssid=ssid, ssid_t=ssid_t, psk=psk, psk_t=psk_t)
+        configkey='Android hotspot', ssid=ssid, ssid_t=ssid_t, psk=psk, psk_t=psk_t, raw=contents)
 
 def get_wcs(device):
     with tempfile.NamedTemporaryFile(prefix='WifiConfigStore_', suffix='.xml') as tf:
@@ -407,3 +416,5 @@ else:
 
 if not args.quiet:
     print(uri, file=stderr)
+if args.raw:
+    print(nn.raw, file=stderr)
