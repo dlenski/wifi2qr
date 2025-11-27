@@ -8,7 +8,7 @@ from os.path import splitext
 import tempfile
 import shlex
 from xml.etree import ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import pbkdf2_hmac
 from typing import Union, Optional
 
@@ -179,7 +179,7 @@ class WifiNetwork:
     broken: bool = False
     hidden: bool = False
     timestamp: Optional[int] = None
-    raw: Union[str, bytes, None] = None
+    raw: Union[str, bytes, None] = field(repr=False, default=None)
 
     @classmethod
     def munge_xml_ap(cls, nn):
@@ -259,6 +259,11 @@ def get_hotspot(device):
                 tf.seek(0)
                 xml = ET.parse(tf)
 
+                version = xml.find("./int[@name='Version']")
+                if version is not None:
+                    version = version.attrib.get('value')
+                if not args.quiet:
+                    print(f"Pulled {path} from Android device (WifiConfigStoreSoftAp v{version})")
                 n = WifiNetwork.munge_xml_ap(xml.getroot())
                 n.timestamp = mtime
                 return n
@@ -283,9 +288,9 @@ def get_hotspot_old(path, contents):
     # Newer versions of Android have apparently moved this to the WifiConfigStore.xml:
     # https://android.googlesource.com/platform/frameworks/base/+/master/wifi/java/src/android/net/wifi/SoftApConfToXmlMigrationUtil.java#111
     version, ssid_len = struct.unpack_from('>IH', contents, 0)
-    assert 1 <= version <= 3
     if not args.quiet:
         print(f"Pulled {path} from Android device (softap.conf v{version})")
+    assert 1 <= version <= 3
 
     ssid, = struct.unpack_from(f'>{ssid_len}s', contents, pos := 6)
     pos += ssid_len
@@ -312,6 +317,7 @@ def get_hotspot_old(path, contents):
     return WifiNetwork(
         configkey='Android hotspot', ssid=ssid, ssid_t=ssid_t, psk=psk, psk_t=psk_t, raw=contents)
 
+
 def get_wcs(device):
     with tempfile.NamedTemporaryFile(prefix='WifiConfigStore_', suffix='.xml') as tf:
         for path in _WCS_PATHS:
@@ -332,6 +338,7 @@ def get_wcs(device):
             (WifiNetwork.munge_xml(nn) for nn in xml.findall('./NetworkList/Network')),
             key=lambda nn: (not nn.connected, nn.broken,
                             nn.ssid_t, nn.configkey))
+
 
 if args.list:
     networks = get_wcs(device)
@@ -373,6 +380,10 @@ else:
             print(f'Using WiFi connection {nn.configkey} from Android device...', file=stderr)
     else:
         p.error(f'Could not find WiFi connection on Android device with ConfigKey or SSID of {args.connection!r}')
+
+if args.raw:
+    print(nn.raw, file=stderr)
+    p.exit()
 
 bits = dict(S=nn.ssid_t)
 if nn.hidden:
@@ -418,5 +429,3 @@ else:
 
 if not args.quiet:
     print(uri, file=stderr)
-if args.raw:
-    print(nn.raw, file=stderr)
