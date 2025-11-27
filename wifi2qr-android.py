@@ -15,6 +15,38 @@ from typing import Union, Optional
 import ppadb.client
 from qrcode import QRCode
 
+def ruthless_root(adbdev: ppadb.device.Device):
+    setattr(device, '_root', None)
+    try:
+        device.root()
+        device._root = 'root'
+        #return 'root'
+    except RuntimeError as exc:
+        if exc.args[0] == 'adbd is already running as root':
+            device._root = 'root'
+            #return 'root'
+        else:
+            if int(device.shell('su -c true; echo $?').splitlines()[-1]) == 0:
+                device._root = 'su'
+                #return 'su'
+    return device._root
+
+
+def root_pull(adbdev: ppadb.device.Device, path, dest):
+    if adbdev._root == 'su':
+        *lines, res = device.shell(f"set -o pipefail; su -c cat {shlex.quote(path)} | base64; echo $?").splitlines()
+        if int(res) == 0:
+            err = None
+            dest.writelines(a2b_base64(l) for l in lines)
+        else:
+            err = res
+    elif adbdev._root == 'root':
+        err = device.pull(path, tf.name)
+    else:
+        raise NotImplementedError("Can't do ADB pull as root: _root={adbdev._root}")
+    return err
+
+
 # Based on my own analysis of the WiFiConfigStore.xml
 # https://blog.digital-forensics.it/2024/02/dissecting-android-wificonfigstorexml.html
 # I later found another project that munges this file:
@@ -86,22 +118,16 @@ elif cli.devices():
 else:
     p.error("No currently connected Android device (try 'adb connect IP[:PORT]' or 'adb mdns services' to find devices on local network).")
 
-use_su = False
-try:
-    device.root()
+root = ruthless_root(device)
+if root == 'root':
     if not args.quiet:
         print('Received ADB root access to device.', file=stderr)
-except RuntimeError as exc:
-    if exc.args[0] == 'adbd is already running as root':
-        if not args.quiet:
-            print('Already have ADB root access to device.', file=stderr)
-    else:
-        if int(device.shell('su -c true; echo $?').splitlines()[-1]) == 0:
-            use_su = True
-            if not args.quiet:
-                print("Couldn't enable ADBD as root, but can use 'su' (see https://stackoverflow.com/a/28070414)", file=stderr)
-        else:
-            p.error('Could not get ADB root access to device.')
+elif root == 'su':
+    if not args.quiet:
+        print("Couldn't enable ADBD as root, but can use 'su' (see https://stackoverflow.com/a/28070414)", file=stderr)
+else:
+    p.error('Could not get ADB root access to device.')
+
 
 def raw_and_maybe_text(raw: Union[bytes, str, None]) -> tuple[Optional[bytes], Optional[str]]:
     if raw is None:
@@ -227,15 +253,7 @@ class WifiNetwork:
 def get_hotspot(device):
     with tempfile.NamedTemporaryFile(prefix='WifiConfigStoreSoftAp_', suffix='.xml') as tf:
         for path in _WCSSA_PATHS:
-            if use_su:
-                *lines, res = device.shell(f"set -o pipefail; su -c {shlex.quote('cat ' + shlex.quote(path))} | base64; echo $?").splitlines()
-                if int(res) == 0:
-                    err = None
-                    tf.writelines(a2b_base64(l) for l in lines)
-                else:
-                    err = res
-            else:
-                err = device.pull(path, tf.name)
+            err = root_pull(device, path, tf)
             if err is None:
                 mtime = int(device.shell(f"su -c {shlex.quote('date -r ' + shlex.quote(path) + ' +%s')}")) * 1000
                 tf.seek(0)
@@ -247,15 +265,7 @@ def get_hotspot(device):
 
     with tempfile.NamedTemporaryFile(prefix='softap_', suffix='.conf', mode='w+b') as tf:
         path = '/data/misc/wifi/softap.conf'
-        if use_su:
-            *lines, res = device.shell(f"set -o pipefail; su -c {shlex.quote('cat ' + shlex.quote(path))} | base64; echo $?").splitlines()
-            if int(res) == 0:
-                err = None
-                tf.writelines(a2b_base64(l) for l in lines)
-            else:
-                err = res
-        else:
-            err = device.pull(path, tf.name)
+        err = root_pull(device, path, tf)
         if err:
             raise RuntimeError(f"Error pulling softap.conf from device: {err}")
         tf.seek(0)
@@ -305,15 +315,7 @@ def get_hotspot_old(path, contents):
 def get_wcs(device):
     with tempfile.NamedTemporaryFile(prefix='WifiConfigStore_', suffix='.xml') as tf:
         for path in _WCS_PATHS:
-            if use_su:
-                *lines, res = device.shell(f"set -o pipefail; su -c {shlex.quote('cat ' + shlex.quote(path))} | base64; echo $?").splitlines()
-                if int(res) == 0:
-                    err = None
-                    tf.writelines(a2b_base64(l) for l in lines)
-                else:
-                    err = res
-            else:
-                err = device.pull(path, tf.name)
+            err = root_pull(device, path, tf)
             if err is None:
                 break
         else:
