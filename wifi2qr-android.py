@@ -9,6 +9,7 @@ import tempfile
 import shlex
 from xml.etree import ElementTree as ET
 from dataclasses import dataclass, field
+from enum import IntEnum
 from hashlib import pbkdf2_hmac
 from typing import Union, Optional
 
@@ -167,11 +168,15 @@ class EAP:
     method: Optional[str]
     phase2_method: Optional[str]
 
+# https://developer.android.com/reference/android/net/wifi/WifiConfiguration#RANDOMIZATION_NONE
+MAC_RAND = IntEnum('MAC_RAND', dict(NONE=0, PERSISTENT=2, NON_PERSISTENT=3))
+
 @dataclass
 class WifiNetwork:
     configkey: str
     ssid: Union[str, bytes]
     ssid_t: str
+    sec: Optional[int] = None   # 0=None, 1=WPA2, 2=WPA2/3, 3=WPA3 (https://developer.android.com/reference/android/net/wifi/WifiConfiguration#SECURITY_TYPE_OPEN)
     psk: Union[str, bytes, None] = None
     psk_t: Optional[str] = None
     eap: Optional[EAP] = None
@@ -179,6 +184,8 @@ class WifiNetwork:
     broken: bool = False
     hidden: bool = False
     timestamp: Optional[int] = None
+    mac_rand: Optional[tuple[MAC_RAND, str]] = None
+    bssids: Optional[list[str]] = None
     raw: Union[str, bytes, None] = field(repr=False, default=None)
 
     @classmethod
@@ -220,6 +227,15 @@ class WifiNetwork:
 
         configkey = nn.findtext("WifiConfiguration/string[@name='ConfigKey']")
 
+        bssid = nn.findtext("WifiConfiguration/string[@name='DefaultGwMacAddress']")
+
+        mac_rand = nn.find("WifiConfiguration/int[@name='MacRandomizationSetting']")
+        if mac_rand is not None:
+            mac_rand = (
+                MAC_RAND(int(mac_rand.attrib.get('value', '0'))),
+                nn.findtext("WifiConfiguration/string[@name='RandomizedMacAddress']")
+            )
+
         eap = nn.find('WifiEnterpriseConfiguration')
         if eap is not None:
             client_cert = eap.findtext("./string[@name='ClientCert']")
@@ -246,7 +262,9 @@ class WifiNetwork:
             connected=connected, broken=broken, hidden=hidden, timestamp=timestamp,
             ssid=ssid, ssid_t=ssid_t,
             psk=psk, psk_t=psk_t,
-            eap=eap, raw=ET.tostring(nn, 'unicode'),
+            eap=eap, mac_rand=mac_rand,
+            bssids=bssid and [bssid],
+            raw=ET.tostring(nn, 'unicode'),
         )
 
 
@@ -382,6 +400,7 @@ else:
         p.error(f'Could not find WiFi connection on Android device with ConfigKey or SSID of {args.connection!r}')
 
 if args.raw:
+    print(nn, file=stderr)
     print(nn.raw, file=stderr)
     p.exit()
 
