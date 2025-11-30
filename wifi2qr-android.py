@@ -183,6 +183,7 @@ class WifiNetwork:
     connected: bool = False
     broken: bool = False
     hidden: bool = False
+    metered: bool = False
     timestamp: Optional[int] = None
     mac_rand: Optional[tuple[MAC_RAND, str]] = None
     bssids: Optional[list[str]] = None
@@ -219,6 +220,20 @@ class WifiNetwork:
         hidden = nn.find("WifiConfiguration/boolean[@name='HiddenSSID']")
         if hidden is not None:
             hidden = (hidden.attrib.get('value', 'false') == 'true')
+
+        metered = nn.find("WifiConfiguration/int[@name='MeteredOverride']")
+        if metered is not None:
+            metered = int(metered.attrib.get('value', '0'))
+            if metered == 1:
+                metered = True
+            elif metered == 2:
+                metered = False
+            else:  # should be 0
+                metered = None
+        if metered is None:
+            metered = nn.find("WifiConfiguration/boolean[@name='MeteredHint']")
+            if metered is not None:
+                metered = (metered.attrib.get('value', 'false') == 'true')
 
         timestamp = nn.find("NetworkStatus/long[@name='ConnectChoiceTimeStamp']")
         if timestamp is not None:
@@ -259,7 +274,8 @@ class WifiNetwork:
 
         return cls(
             configkey=configkey,
-            connected=connected, broken=broken, hidden=hidden, timestamp=timestamp,
+            connected=connected, broken=broken, hidden=hidden, metered=metered,
+            timestamp=timestamp,
             ssid=ssid, ssid_t=ssid_t,
             psk=psk, psk_t=psk_t,
             eap=eap, mac_rand=mac_rand,
