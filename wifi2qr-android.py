@@ -171,12 +171,15 @@ class EAP:
 # https://developer.android.com/reference/android/net/wifi/WifiConfiguration#RANDOMIZATION_NONE
 MAC_RAND = IntEnum('MAC_RAND', dict(NONE=0, PERSISTENT=2, NON_PERSISTENT=3))
 
+# https://developer.android.com/reference/android/net/wifi/WifiConfiguration#SECURITY_TYPE_OPEN
+SEC_TYPE = IntEnum('SEC_TYPE', dict(NONE=0, WEP=1, PSK=2, EAP=3, SAE=4, OWE=6, WPA3E=9))
+
 @dataclass
 class WifiNetwork:
     configkey: str
     ssid: Union[str, bytes]
     ssid_t: str
-    sec: Optional[int] = None   # 0=None, 1=WPA2, 2=WPA2/3, 3=WPA3 (https://developer.android.com/reference/android/net/wifi/WifiConfiguration#SECURITY_TYPE_OPEN)
+    sec: Optional[list[SEC_TYPE]] = None
     psk: Union[str, bytes, None] = None
     psk_t: Optional[str] = None
     eap: Optional[EAP] = None
@@ -251,6 +254,16 @@ class WifiNetwork:
                 nn.findtext("WifiConfiguration/string[@name='RandomizedMacAddress']")
             )
 
+        sts = []
+        spl = nn.find('WifiConfiguration/SecurityParamsList')
+        if spl is not None:
+            for sp in spl.findall('./SecurityParams'):
+                st = sp.find("./int/[@name='SecurityType']")
+                if st is not None:
+                    ie = sp.find("./boolean/[@name='IsEnabled']")
+                    if ie is None or (ie.attrib.get('value', 'true') != 'false'):
+                        sts.append(SEC_TYPE(int(st.attrib.get('value', '0'))))
+
         eap = nn.find('WifiEnterpriseConfiguration')
         if eap is not None:
             client_cert = eap.findtext("./string[@name='ClientCert']")
@@ -277,6 +290,7 @@ class WifiNetwork:
             connected=connected, broken=broken, hidden=hidden, metered=metered,
             timestamp=timestamp,
             ssid=ssid, ssid_t=ssid_t,
+            sec=sts,
             psk=psk, psk_t=psk_t,
             eap=eap, mac_rand=mac_rand,
             bssids=bssid and [bssid],
